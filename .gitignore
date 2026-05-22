@@ -1,0 +1,14 @@
+# Directories 
+
+.vscode/
+build/
+
+# Files
+
+*.log
+*.tmp
+*.bak
+*.swp
+*.env
+
+# OS generated files
