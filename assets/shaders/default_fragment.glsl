@@ -2,9 +2,12 @@
 
 out vec4 glColor;
 
-in vec3 vColor;
+in vec2 vUV;
+
+
+uniform sampler2D colorMap;
 
 void main()
 {
-    glColor = vec4(vColor, 1.0);
+    glColor = texture(colorMap, vUV);
 }

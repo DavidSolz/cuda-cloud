@@ -1,4 +1,4 @@
-# ☁ Cloud-Cuda
+# ☁ CUDA-cloud
 
 ![C++](https://img.shields.io/badge/C++-20-blue)
 ![HPC](https://img.shields.io/badge/HPC-high--performance--computing-purple)

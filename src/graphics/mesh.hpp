@@ -30,6 +30,8 @@ struct VertexProperty
 enum class RenderMode
 {
     Triangles = GL_TRIANGLES,
+    TriangleStrip = GL_TRIANGLE_STRIP,
+    TriangleFan = GL_TRIANGLE_FAN,
     Lines = GL_LINES,
     LineStrip = GL_LINE_STRIP,
     LineLoop = GL_LINE_LOOP,
@@ -56,6 +58,13 @@ public:
     void setVertices(const void *vertices, const size_t vertexCount, const size_t vertexSize);
     void setVertexProperties(const std::vector<VertexProperty> &properties);
     void setIndices(const std::vector<GLuint> &indices);
+
+    GLuint getVertexArrayObject() const;
+    GLuint getVertexBufferObject() const;
+    GLuint getIndexBufferObject() const;
+
+    size_t getVertexCount() const;
+    size_t getIndexCount() const;
 
     void render() const;
 

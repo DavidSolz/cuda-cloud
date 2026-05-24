@@ -11,4 +11,6 @@ build/
 *.swp
 *.env
 
+imgui.ini
+
 # OS generated files

@@ -24,6 +24,8 @@ private:
     size_t _width;
     size_t _height;
 
+    static void onResize(GLFWwindow* window, int width, int height);
+
 public:
     Application(const ApplicationProperties& properties);
     

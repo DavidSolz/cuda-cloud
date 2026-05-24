@@ -2,6 +2,15 @@
 
 bool Application::_initialized = false;
 
+void Application::onResize(GLFWwindow* window, int width, int height) {
+    Application* app = static_cast<Application*>(glfwGetWindowUserPointer(window));
+    if (app) {
+        app->_width = width;
+        app->_height = height;
+        glViewport(0, 0, width, height);
+    }
+}
+
 Application::Application(const ApplicationProperties& properties) {
 
     if (!_initialized) {
@@ -28,6 +37,9 @@ Application::Application(const ApplicationProperties& properties) {
 
     glfwMakeContextCurrent(_window);
     glfwSwapInterval(properties.frameInterval);
+
+    glfwSetWindowUserPointer(_window, this);
+    glfwSetFramebufferSizeCallback(_window, onResize);
 
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         throw std::runtime_error("Failed to initialize GLAD");

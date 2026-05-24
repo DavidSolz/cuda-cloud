@@ -87,6 +87,31 @@ void Mesh::setIndices(const std::vector<GLuint> &indices)
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, 0);
 }
 
+GLuint Mesh::getVertexArrayObject() const
+{
+    return _vertexArrayObject;
+}
+
+GLuint Mesh::getVertexBufferObject() const
+{
+    return _vertexBufferObject;
+}
+
+GLuint Mesh::getIndexBufferObject() const
+{
+    return _indexBufferObject;
+}
+
+size_t Mesh::getVertexCount() const
+{
+    return _vertexCount;
+}
+
+size_t Mesh::getIndexCount() const
+{
+    return _indexCount;
+}
+
 void Mesh::render() const
 {
     glBindVertexArray(_vertexArrayObject);
