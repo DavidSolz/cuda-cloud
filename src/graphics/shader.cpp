@@ -8,7 +8,8 @@ Shader::Shader(const std::string& vertexPath, const std::string& fragmentPath) {
     std::ifstream fShaderFile(fragmentPath);
 
     if (!vShaderFile.is_open() || !fShaderFile.is_open()) {
-        throw std::runtime_error("Failed to open shader files");
+
+        throw std::runtime_error("Failed to open shader files" + vertexPath + " and/or " + fragmentPath);
     }
 
     vertexCode = std::string((std::istreambuf_iterator<char>(vShaderFile)), std::istreambuf_iterator<char>());
@@ -54,6 +55,10 @@ void Shader::setVec3(const std::string& name, const glm::vec3& value) {
     glUniform3fv(getUniformLocation(name), 1, &value[0]);
 }
 
+void Shader::setVec2(const std::string& name, const glm::vec2& value) {
+    glUniform2fv(getUniformLocation(name), 1, &value[0]);
+}
+
 void Shader::setFloat(const std::string& name, float value) {
     glUniform1f(getUniformLocation(name), value);
 }
@@ -72,7 +77,7 @@ GLint Shader::getUniformLocation(const std::string& name) {
     }
     GLint location = glGetUniformLocation(_id, name.c_str());
     if (location == -1) {
-        throw std::runtime_error("Uniform '" + name + "' not found in shader");
+        std::cout << "Warning: uniform '" << name << "' not found in shader!" << std::endl;
     }
     _uniformLocations[name] = location;
     return location;

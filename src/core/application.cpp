@@ -28,6 +28,7 @@ Application::Application(const ApplicationProperties& properties) {
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+    glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, GL_TRUE);
 
     _window = glfwCreateWindow(_width, _height, properties.title.c_str(), nullptr, nullptr);
 
@@ -44,6 +45,8 @@ Application::Application(const ApplicationProperties& properties) {
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
         throw std::runtime_error("Failed to initialize GLAD");
     }
+
+    glViewport(0, 0, _width, _height);
 
 }
 
