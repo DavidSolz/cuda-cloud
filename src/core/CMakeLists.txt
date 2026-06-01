@@ -3,7 +3,7 @@ add_library(core STATIC
     application.cpp
 )
 
-find_package(OpenMP OPTIONAL)
+find_package(OpenMP)
 
 target_include_directories(core PUBLIC
     .

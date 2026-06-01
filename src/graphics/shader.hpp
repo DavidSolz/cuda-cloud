@@ -33,5 +33,7 @@ public:
     void setFloat(const std::string& name, float value);
     void setInt(const std::string& name, int value);
 
+    GLuint getId() const;
+
     ~Shader();
 };

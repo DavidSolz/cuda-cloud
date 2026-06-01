@@ -10,7 +10,7 @@ target_link_libraries(noise PUBLIC
     glm
 )
 
-find_package(OpenMP OPTIONAL)
+find_package(OpenMP)
 
 if(OpenMP_CXX_FOUND)
     message(STATUS "OpenMP found, enabling parallelism in noise generation")

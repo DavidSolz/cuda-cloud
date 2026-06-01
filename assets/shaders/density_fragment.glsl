@@ -1,5 +1,15 @@
 #version 410 core
 
+layout(std140) uniform FramebufferDataBuffer {
+    mat4 projectionMatrix;
+    mat4 viewMatrix;
+    vec4 eyePosition;
+    vec2 resolution;
+    vec2 padding1;
+    float time;
+    vec3 padding2;
+} framebufferData;
+
 out vec4 glColor;
 
 in vec2 uUV;
@@ -14,8 +24,6 @@ uniform vec3 boundingBoxMin;
 uniform vec3 boundingBoxMax;
 
 uniform vec3 lightPos;
-uniform vec3 cameraPos;
-uniform vec2 resolution;
 
 uniform sampler2D colorTexture;
 uniform sampler2D depthTexture;
@@ -98,12 +106,12 @@ float getLinearDepth(vec2 uv)
 }
 void main()
 {
-    vec2 texCoord = gl_FragCoord.xy / resolution.xy;
+    vec2 texCoord = gl_FragCoord.xy / framebufferData.resolution.xy;
     vec4 clipPos = vec4(texCoord * 2.0 - 1.0, -1.0, 1.0);
 
     vec4 target = invProjectionMatrix * clipPos;
     vec3 rayDirection = normalize((invViewMatrix * vec4(normalize(target.xyz / target.w), 0.0)).xyz);
-    vec3 rayOrigin = cameraPos;
+    vec3 rayOrigin = framebufferData.eyePosition.xyz;
 
     vec4 opaqueColor = texture(colorTexture, texCoord);
     float opaqueDepth = getLinearDepth(texCoord);
@@ -127,7 +135,7 @@ void main()
     float distanceInsideBox = tFar - tNear;
     int numSteps = clamp(int(distanceInsideBox / stepSize), 0, numStepsView);
 
-    float jitter = hash(texCoord * resolution) * stepSize;
+    float jitter = hash(texCoord * framebufferData.resolution) * stepSize;
     float currentT = tNear + jitter;
 
     vec3 lightEnergy = vec3(0.0f);

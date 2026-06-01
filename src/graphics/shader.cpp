@@ -67,6 +67,10 @@ void Shader::setInt(const std::string& name, int value) {
     glUniform1i(getUniformLocation(name), value);
 }
 
+GLuint Shader::getId() const {
+    return _id;
+}
+
 Shader::~Shader() {
     glDeleteProgram(_id);
 }
@@ -90,13 +94,15 @@ void Shader::checkCompileErrors(GLuint shader, const std::string& type) const {
         glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
         if (!success) {
             glGetShaderInfoLog(shader, 1024, nullptr, infoLog);
-            throw std::runtime_error("Shader compilation error of type: " + type + "\n" + infoLog);
+            std::cerr << "Shader compilation error of type: " << type << "\n" << infoLog << std::endl;
+            throw std::runtime_error("Shader compilation error of type: " + type + "\n");
         }
     } else {
         glGetProgramiv(shader, GL_LINK_STATUS, &success);
         if (!success) {
             glGetProgramInfoLog(shader, 1024, nullptr, infoLog);
-            throw std::runtime_error("Program linking error of type: " + type + "\n" + infoLog);
+            std::cerr << "Program linking error of type: " << type << "\n" << infoLog << std::endl;
+            throw std::runtime_error("Program linking error of type: " + type + "\n");
         }
     }
 }
