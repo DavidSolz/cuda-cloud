@@ -7,6 +7,7 @@ if(USE_CUDA)
 endif()
 
 add_subdirectory(graphics)
+add_subdirectory(pipeline)
 add_subdirectory(ui)
 add_subdirectory(scene)
 add_subdirectory(utils)
@@ -21,6 +22,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ui
     graphics
     noise
+    pipeline
 )
 
 if(USE_CUDA)
@@ -36,5 +38,5 @@ message(STATUS "Copying assets to build directory")
 add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
     ${CMAKE_SOURCE_DIR}/assets
-    ${CMAKE_BINARY_DIR}/assets
+    ${CMAKE_BINARY_DIR}/src/assets
 )

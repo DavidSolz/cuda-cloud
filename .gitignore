@@ -2,6 +2,7 @@
 
 .vscode/
 build/
+.cache/
 
 # Files
 
@@ -11,6 +12,7 @@ build/
 *.swp
 *.env
 
-imgui.ini
-
 # OS generated files
+
+imgui.ini
+compile_commands.json

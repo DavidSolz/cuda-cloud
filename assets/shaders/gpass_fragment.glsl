@@ -16,6 +16,8 @@ in VertexData {
     vec2 uv;
 } vertexData;
 
+uniform vec3 mAlbedo;
+
 layout(location = 0) out vec4 gPosition;
 layout(location = 1) out vec4 gNormal;
 layout(location = 2) out vec4 gAlbedo;
@@ -23,9 +25,8 @@ layout(location = 2) out vec4 gAlbedo;
 void main()
 {
     vec3 normal = normalize(vertexData.normal);
-    vec3 objectColor = vec3(0.8, 0.5, 0.3);
 
     gPosition = vec4(vertexData.worldPosition, 1.0f);
     gNormal = vec4(normal * 0.5 + 0.5, 1.0f);
-    gAlbedo = vec4(objectColor, 1.0f);
+    gAlbedo = vec4(mAlbedo, 1.0f);
 }

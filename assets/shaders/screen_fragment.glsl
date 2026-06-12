@@ -16,7 +16,6 @@ uniform sampler2D gAlbedo;
 
 layout(location = 0) out vec4 fragColor;
 
-uniform vec3 mAlbedo;
 uniform float mMetallic;
 uniform float mRoughness;
 
@@ -72,7 +71,7 @@ void main()
     vec3 view = normalize(cameraPos - position);
 
     vec3 F0 = vec3(0.04); 
-    F0 = mix(F0, mAlbedo, mMetallic);
+    F0 = mix(F0, albedo, mMetallic);
 
     vec3 Lo = vec3(0.0);
     for (int i = 0; i < 10; i++)
@@ -97,10 +96,10 @@ void main()
         vec3 specular = numerator / denominator;  
 
         float NdotL = max(dot(normal, light), 0.0);        
-        Lo += (kD * mAlbedo / PI + specular) * radiance * NdotL;
+        Lo += (kD * albedo / PI + specular) * radiance * NdotL;
     }
 
-    vec3 ambient = vec3(0.03) * mAlbedo;
+    vec3 ambient = vec3(0.03) * albedo;
     vec3 color = ambient + Lo; 
 
     color = color / (color + vec3(1.0));
