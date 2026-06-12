@@ -4,8 +4,8 @@
 
 layout(std140) uniform LightDataBuffer
 {
-    vec3 position[10];
-    vec3 color[10];
+    vec4 position[10];
+    vec4 color[10];
 } lightDataBuffer;
 
 in vec2 uv;
@@ -13,13 +13,10 @@ in vec2 uv;
 uniform sampler2D gPosition;
 uniform sampler2D gNormal;
 uniform sampler2D gAlbedo;
+uniform float mClearCoatRoughness = 0.05f;
 
 layout(location = 0) out vec4 fragColor;
 
-uniform float mMetallic;
-uniform float mRoughness;
-
-uniform vec3 lightPos;
 uniform vec3 cameraPos;
 
 float DistributionGGX(vec3 N, vec3 H, float roughness)
@@ -36,22 +33,34 @@ float DistributionGGX(vec3 N, vec3 H, float roughness)
     return num / denom;
 }
 
-float GeometrySchlickGGX(float NdotV, float roughness)
+float GeometrySchlickGGX_Base(float NdotV, float roughness)
 {
-    float r = (roughness + 1.0);
-    float k = (r*r) / 8.0;
+    float r = roughness + 1.0;
+    float k = (r * r) / 8.0;
 
     float num   = NdotV;
     float denom = NdotV * (1.0 - k) + k;
 	
     return num / denom;
 }
-float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness)
+
+float GeometrySchlickGGX_Coat(float NdotV, float roughness)
+{
+    float roughnessSquared = roughness * roughness;
+    float k = (roughnessSquared * roughnessSquared) / 2.0;
+
+    float num   = NdotV;
+    float denom = NdotV * (1.0 - k) + k;
+	
+    return num / denom;
+}
+
+float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness, bool isCoat)
 {
     float NdotV = max(dot(N, V), 0.0);
     float NdotL = max(dot(N, L), 0.0);
-    float ggx2  = GeometrySchlickGGX(NdotV, roughness);
-    float ggx1  = GeometrySchlickGGX(NdotL, roughness);
+    float ggx2  = isCoat ? GeometrySchlickGGX_Coat(NdotV, roughness) : GeometrySchlickGGX_Base(NdotV, roughness);
+    float ggx1  = isCoat ? GeometrySchlickGGX_Coat(NdotL, roughness) : GeometrySchlickGGX_Base(NdotL, roughness);
 	
     return ggx1 * ggx2;
 }
@@ -64,14 +73,24 @@ vec3 fresnelSchlick(float cosTheta, vec3 F0)
 void main()
 {
 
-    vec3 position = texture(gPosition, uv).xyz;
-    vec3 normal = normalize(texture(gNormal, uv).xyz * 2.0 - 1.0);
-    vec3 albedo = texture(gAlbedo, uv).rgb;
+    vec4 positionData = texture(gPosition, uv);
+    vec3 position = positionData.xyz;
+    float clearcoat = positionData.w;
+
+    vec4 normalData = texture(gNormal, uv);
+    vec3 normal = normalize(normalData.xyz); 
+    float roughness = normalData.w;
+
+    vec4 albedoData = texture(gAlbedo, uv);
+    vec3 albedo = albedoData.rgb;
+    float metallic = albedoData.w;
 
     vec3 view = normalize(cameraPos - position);
 
     vec3 F0 = vec3(0.04); 
-    F0 = mix(F0, albedo, mMetallic);
+    F0 = mix(F0, albedo, metallic);
+
+    vec3 F0_clearCoat = vec3(0.04);
 
     vec3 Lo = vec3(0.0);
     for (int i = 0; i < 10; i++)
@@ -83,23 +102,32 @@ void main()
         float attenuation = 1.0 / (distance * distance);
         vec3 radiance = lightDataBuffer.color[i].rgb * attenuation;
 
-        vec3 F = fresnelSchlick(max(dot(halfway, view), 0.0), F0);
-        float NDF = DistributionGGX(normal, halfway, mRoughness);       
-        float G = GeometrySmith(normal, view, light, mRoughness);
+        float NdotL = max(dot(normal, light), 0.0);
+        float NdotV = max(dot(normal, view), 0.0);
 
-        vec3 kS = F;
-        vec3 kD = vec3(1.0) - kS;
-        kD *= 1.0 - mMetallic;	
+        vec3 F_base = fresnelSchlick(max(dot(halfway, view), 0.0), F0);
+        float NDF_base = DistributionGGX(normal, halfway, roughness);       
+        float G_base = GeometrySmith(normal, view, light, roughness, false);
 
-        vec3 numerator = NDF * G * F;
-        float denominator = 4.0 * max(dot(normal, view), 0.0) * max(dot(normal, light), 0.0)  + 0.0001;
-        vec3 specular = numerator / denominator;  
+        vec3 specular_base = (NDF_base * G_base * F_base) / (4.0 * NdotV * NdotL + 0.0001);
+        vec3 kS_base = F_base;
+        vec3 kD_base = (vec3(1.0) - kS_base) * (1.0 - metallic);
+        vec3 diffuse_base = kD_base * albedo / PI;
 
-        float NdotL = max(dot(normal, light), 0.0);        
-        Lo += (kD * albedo / PI + specular) * radiance * NdotL;
+        vec3 baseLayer = (diffuse_base + specular_base) * radiance * NdotL; 
+
+        vec3 F_coat = fresnelSchlick(max(dot(halfway, view), 0.0), F0_clearCoat);
+        float NDF_coat = DistributionGGX(normal, halfway, mClearCoatRoughness);
+        float G_coat   = GeometrySmith(normal, view, light, mClearCoatRoughness, true);
+        
+        vec3 specular_coat = (NDF_coat * G_coat * F_coat) / (4.0 * NdotV * NdotL + 0.0001);
+
+        float attenuation_coat = 1.0 - (F_coat.r * clearcoat);
+
+        Lo += (baseLayer * attenuation_coat) + (specular_coat * clearcoat * radiance * NdotL);
     }
 
-    vec3 ambient = vec3(0.03) * albedo;
+    vec3 ambient = vec3(0.03) * albedo * (1.0 - clearcoat * 0.04);
     vec3 color = ambient + Lo; 
 
     color = color / (color + vec3(1.0));

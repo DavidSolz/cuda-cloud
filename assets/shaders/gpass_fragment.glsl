@@ -17,6 +17,9 @@ in VertexData {
 } vertexData;
 
 uniform vec3 mAlbedo;
+uniform float mRoughness;
+uniform float mMetallic;
+uniform float mClearcoat;
 
 layout(location = 0) out vec4 gPosition;
 layout(location = 1) out vec4 gNormal;
@@ -26,7 +29,7 @@ void main()
 {
     vec3 normal = normalize(vertexData.normal);
 
-    gPosition = vec4(vertexData.worldPosition, 1.0f);
-    gNormal = vec4(normal * 0.5 + 0.5, 1.0f);
-    gAlbedo = vec4(mAlbedo, 1.0f);
+    gPosition = vec4(vertexData.worldPosition, mClearcoat);
+    gNormal = vec4(normal, mRoughness);
+    gAlbedo = vec4(vertexData.uv, 0.0, mMetallic);
 }

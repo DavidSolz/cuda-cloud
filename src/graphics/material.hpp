@@ -8,5 +8,6 @@ struct alignas(16) Material
     float _pad0;
     float metallic;
     float roughness;
-    glm::vec2 _pad1;
+    float clearcoat;
+    float _pad1;
 };

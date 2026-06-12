@@ -1,3 +1,4 @@
+#include "glm/ext/vector_float3.hpp"
 #include <chrono>
 #include <iostream>
 
@@ -83,11 +84,12 @@ int main() {
   std::cout << "Renderer: " << renderer << std::endl;
   std::cout << "OpenGL version supported: " << version << std::endl;
 
-  struct CubeVertex {
-    glm::vec3 position;
-    glm::vec3 normal;
-    glm::vec2 uv;
-  };
+  struct {
+    std::vector<glm::vec3> positions;
+    std::vector<glm::vec3> normals;
+    std::vector<glm::vec2> uvs;
+    std::vector<unsigned int> indices;
+  } cubeData;
 
   tinyobj::attrib_t attrib;
   std::vector<tinyobj::shape_t> shapes;
@@ -95,13 +97,8 @@ int main() {
   tinyobj::LoadObj(&attrib, &shapes, &materials, nullptr, nullptr,
                    "assets/models/suzanne.obj");
 
-  std::vector<CubeVertex> vertices;
-  std::vector<unsigned int> indices;
-
   for (size_t i = 0; i < shapes.size(); ++i) {
     const auto &shape = shapes[i];
-
-    std::cout << "Processing shape: " << shape.name << std::endl;
 
     size_t index_offset = 0;
     for (size_t f = 0; f < shape.mesh.num_face_vertices.size(); f++) {
@@ -109,69 +106,77 @@ int main() {
 
       for (size_t v = 0; v < fv; v++) {
         tinyobj::index_t idx = shape.mesh.indices[index_offset + v];
-        CubeVertex vertex;
 
-        vertex.position = {attrib.vertices[3 * idx.vertex_index + 0],
-                           attrib.vertices[3 * idx.vertex_index + 1],
-                           attrib.vertices[3 * idx.vertex_index + 2]};
+        cubeData.positions.push_back(
+            {attrib.vertices[3 * idx.vertex_index + 0],
+             attrib.vertices[3 * idx.vertex_index + 1],
+             attrib.vertices[3 * idx.vertex_index + 2]});
 
         if (idx.normal_index >= 0) {
-          vertex.normal = {attrib.normals[3 * idx.normal_index + 0],
-                           attrib.normals[3 * idx.normal_index + 1],
-                           attrib.normals[3 * idx.normal_index + 2]};
+          cubeData.normals.push_back(
+              {attrib.normals[3 * idx.normal_index + 0],
+               attrib.normals[3 * idx.normal_index + 1],
+               attrib.normals[3 * idx.normal_index + 2]});
         } else {
-          vertex.normal = {0.0f, 0.0f, 0.0f};
+          cubeData.normals.push_back({0.0f, 0.0f, 0.0f});
         }
 
         if (idx.texcoord_index >= 0) {
-          vertex.uv = {attrib.texcoords[2 * idx.texcoord_index + 0],
-                       attrib.texcoords[2 * idx.texcoord_index + 1]};
+          cubeData.uvs.push_back(
+              {attrib.texcoords[2 * idx.texcoord_index + 0],
+               attrib.texcoords[2 * idx.texcoord_index + 1]});
         } else {
-          vertex.uv = {0.0f, 0.0f};
+          cubeData.uvs.push_back({0.0f, 0.0f});
         }
 
-        vertices.push_back(vertex);
-        indices.push_back(static_cast<unsigned int>(indices.size()));
+        cubeData.indices.push_back(
+            static_cast<unsigned int>(cubeData.indices.size()));
       }
       index_offset += fv;
     }
   }
 
+  glm::vec3 minBounds(FLT_MAX);
+  glm::vec3 maxBounds(-FLT_MAX);
+
+  for (size_t i = 0; i < cubeData.positions.size(); ++i) 
+  {
+    const auto &pos = cubeData.positions[i];
+    minBounds = glm::min(minBounds, pos);
+    maxBounds = glm::max(maxBounds, pos);
+  }
+
+  for(size_t i = 0; i < cubeData.positions.size(); ++i) 
+  {
+    cubeData.positions[i] = (cubeData.positions[i] - minBounds) / (maxBounds - minBounds) * 2.0f - 1.0f;
+  }
+
   Mesh cubeMesh;
-  cubeMesh.setVertices(vertices.data(), vertices.size(), sizeof(CubeVertex));
-  cubeMesh.setIndices(indices);
+  cubeMesh.setAttribute(VertexAttribute::Position, cubeData.positions);
+  cubeMesh.setAttribute(VertexAttribute::Normal, cubeData.normals);
+  cubeMesh.setAttribute(VertexAttribute::TexCoord, cubeData.uvs);
+  cubeMesh.setIndices(cubeData.indices);
   cubeMesh.setRenderMode(RenderMode::Triangles);
 
-  cubeMesh.setVertexProperties(
-      {{0, 3, VertexPropertyType::Float, false, sizeof(CubeVertex),
-        offsetof(CubeVertex, position)},
-       {1, 3, VertexPropertyType::Float, false, sizeof(CubeVertex),
-        offsetof(CubeVertex, normal)},
-       {2, 2, VertexPropertyType::Float, false, sizeof(CubeVertex),
-        offsetof(CubeVertex, uv)}});
+  struct {
+    std::vector<glm::vec3> positions;
+    std::vector<glm::vec2> uvs;
+    std::vector<unsigned int> indices;
+  } planeVertices;
 
-  struct PlaneVertex {
-    glm::vec3 position;
-    glm::vec2 uv;
-  };
+  planeVertices.positions = {{-1.0f, -1.0f, 0.0f},
+                             {1.0f, -1.0f, 0.0f},
+                             {1.0f, 1.0f, 0.0f},
+                             {-1.0f, 1.0f, 0.0f}};
+  planeVertices.uvs = {{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}};
 
-  std::vector<PlaneVertex> pvertices = {{{-1.0f, -1.0f, 0.0f}, {0.0f, 0.0f}},
-                                        {{1.0f, -1.0f, 0.0f}, {1.0f, 0.0f}},
-                                        {{1.0f, 1.0f, 0.0f}, {1.0f, 1.0f}},
-                                        {{-1.0f, 1.0f, 0.0f}, {0.0f, 1.0f}}};
-
-  indices = {0, 1, 2, 2, 3, 0};
+  planeVertices.indices = {0, 1, 2, 2, 3, 0};
 
   Mesh planeMesh;
-  planeMesh.setVertices(pvertices.data(), pvertices.size(),
-                        sizeof(PlaneVertex));
-  planeMesh.setIndices(indices);
+  planeMesh.setAttribute(VertexAttribute::Position, planeVertices.positions);
+  planeMesh.setAttribute(VertexAttribute::TexCoord, planeVertices.uvs);
+  planeMesh.setIndices(planeVertices.indices);
   planeMesh.setRenderMode(RenderMode::Triangles);
-  planeMesh.setVertexProperties(
-      {{0, 3, VertexPropertyType::Float, false, sizeof(PlaneVertex),
-        offsetof(PlaneVertex, position)},
-       {1, 2, VertexPropertyType::Float, false, sizeof(PlaneVertex),
-        offsetof(PlaneVertex, uv)}});
 
   int currentWidth = app.getWidth();
   int currentHeight = app.getHeight();
@@ -245,24 +250,51 @@ int main() {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   auto updateFramebufferSizes = [&](int w, int h) {
+    if (gDepth)
+      glDeleteTextures(1, &gDepth);
+    if (gPosition)
+      glDeleteTextures(1, &gPosition);
+    if (gNormal)
+      glDeleteTextures(1, &gNormal);
+    if (gAlbedo)
+      glDeleteTextures(1, &gAlbedo);
+    if (gBuffer)
+      glDeleteFramebuffers(1, &gBuffer);
+
+    glGenTextures(1, &gDepth);
     glBindTexture(GL_TEXTURE_2D, gDepth);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, w, h, 0,
                  GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
+    glGenTextures(1, &gPosition);
     glBindTexture(GL_TEXTURE_2D, gPosition);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT,
                  nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
+    glGenTextures(1, &gNormal);
     glBindTexture(GL_TEXTURE_2D, gNormal);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT,
                  nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 
+    glGenTextures(1, &gAlbedo);
     glBindTexture(GL_TEXTURE_2D, gAlbedo);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
                  nullptr);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glBindTexture(GL_TEXTURE_2D, 0);
 
+    glGenFramebuffers(1, &gBuffer);
     glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
-
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
                            gPosition, 0);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D,
@@ -274,14 +306,14 @@ int main() {
 
     glDrawBuffers(3, attachments);
 
+    if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
+      std::cerr << "Framebuffer not complete!" << std::endl;
+    }
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-
     glViewport(0, 0, w, h);
   };
 
   glm::mat4 model = glm::mat4(1.0f);
-
-  glm::vec3 backgroundColor(0.0f);
 
   glm::vec3 cameraPos(0.0f, 0.0f, 3.0f);
   glm::vec3 cameraTarget(0.0f, 0.0f, -1.0f);
@@ -292,6 +324,7 @@ int main() {
   material.albedo = glm::vec3(0.5f, 0.5f, 0.3f);
   material.metallic = 0.5f;
   material.roughness = 0.5f;
+  material.clearcoat = 0.5f;
 
   auto lastTime = std::chrono::high_resolution_clock::now();
   float accumulatedTime = 0.0f;
@@ -327,11 +360,8 @@ int main() {
       {-7.0f, 5.0f, -7.0f}};
 
   Mesh lightMesh;
-  lightMesh.setVertices(lightPositions.data(), lightPositions.size(),
-                        sizeof(glm::vec3));
+  lightMesh.setAttribute(VertexAttribute::Position, lightPositions);
   lightMesh.setRenderMode(RenderMode::Points);
-  lightMesh.setVertexProperties(
-      {{0, 3, VertexPropertyType::Float, false, sizeof(glm::vec3), 0}});
 
   FramebufferDataBuffer framebufferDataBuffer;
   LightDataBuffer lightDataBuffer;
@@ -439,7 +469,7 @@ int main() {
 
     if (glfwGetKey(app.getNativeHandle(), GLFW_KEY_D) == GLFW_PRESS) {
       cameraPos += glm::vec3(1.0f, 0.0f, 0.0f) * deltaTime * 5.0f;
-    }
+    } 
 
     if (app.getWidth() != currentWidth || app.getHeight() != currentHeight) {
       currentWidth = app.getWidth();
@@ -455,12 +485,15 @@ int main() {
     glViewport(0, 0, currentWidth, currentHeight);
     glEnable(GL_DEPTH_TEST);
 
-    glClearColor(backgroundColor.r, backgroundColor.g, backgroundColor.b, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     gPassShader.use();
 
+    gPassShader.setFloat("mMetallic", material.metallic);
+    gPassShader.setFloat("mRoughness", material.roughness);
     gPassShader.setVec3("mAlbedo", material.albedo);
+    gPassShader.setFloat("mClearcoat", material.clearcoat);
     gPassShader.setMat4("modelMatrix", model);
     cubeMesh.render();
 
@@ -490,11 +523,7 @@ int main() {
     glBindTexture(GL_TEXTURE_2D, gAlbedo);
     screenPassShader.setInt("gAlbedo", 2);
 
-    screenPassShader.setFloat("mMetallic", material.metallic);
-    screenPassShader.setFloat("mRoughness", material.roughness);
-
     screenPassShader.setVec3("cameraPos", cameraPos);
-
     planeMesh.render();
 
     imgui.begin();
@@ -504,7 +533,7 @@ int main() {
     ImGui::ColorEdit3("Albedo", &material.albedo.x);
     ImGui::DragFloat("Metallic", &material.metallic, 0.01f, 0.0f, 1.0f);
     ImGui::DragFloat("Roughness", &material.roughness, 0.01f, 0.0f, 1.0f);
-    ImGui::ColorEdit3("Background Color", &backgroundColor.x);
+    ImGui::DragFloat("Clearcoat", &material.clearcoat, 0.01f, 0.0f, 1.0f);
     ImGui::End();
 
     ImGui::Begin("Debug View");
