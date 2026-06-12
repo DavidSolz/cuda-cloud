@@ -9,7 +9,7 @@ set(glad_SOURCES
     "src/glad.c"
 )
 
-add_library(glad SHARED ${glad_SOURCES})
+add_library(glad STATIC ${glad_SOURCES})
 
 target_include_directories(glad PUBLIC
     "include"

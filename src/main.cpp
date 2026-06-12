@@ -53,15 +53,8 @@ int main()
     auto renderer = glGetString(GL_RENDERER);
     auto version = glGetString(GL_VERSION);
 
-    glGetIntegerv(GL_NUM_EXTENSIONS, &properties.frameInterval);
-
     std::cout << "Renderer: " << renderer << std::endl;
     std::cout << "OpenGL version supported: " << version << std::endl;
-
-    for(int i = 0; i < properties.frameInterval; i++)
-    {
-        std::cout << "Extension " << i + 1 << ": " << glGetStringi(GL_EXTENSIONS, i) << std::endl;
-    }
 
     struct CubeVertex
     {
@@ -235,8 +228,8 @@ int main()
     int lastFps = 0;
     float lastDeltaTime = 0.0f;
     
-    Shader gPassShader("../assets/shaders/gpass_vertex.glsl", "../assets/shaders/gpass_fragment.glsl");
-    Shader screenPassShader("../assets/shaders/screen_vertex.glsl", "../assets/shaders/screen_fragment.glsl");
+    Shader gPassShader("assets/shaders/gpass_vertex.glsl", "assets/shaders/gpass_fragment.glsl");
+    Shader screenPassShader("assets/shaders/screen_vertex.glsl", "assets/shaders/screen_fragment.glsl");
 
     struct alignas(16) FramebufferDataBuffer
     {
