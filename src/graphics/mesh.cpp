@@ -53,6 +53,11 @@ size_t Mesh::getIndexCount() const
     return _indexCount;
 }
 
+size_t Mesh::getVertexArrayObject() const
+{
+    return _vertexArrayObject;
+}
+
 void Mesh::render() const
 {
     if (_vertexArrayObject == 0) return;

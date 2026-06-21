@@ -1,4 +1,6 @@
 #include "glm/ext/vector_float3.hpp"
+#include "imgui.h"
+#include <algorithm>
 #include <chrono>
 #include <iostream>
 
@@ -34,45 +36,16 @@ void renderFooter(int fps, float frameTime) {
   ImGui::PopStyleVar();
 }
 
-class GeometryPassExecutor : public NodeExecutor {
-public:
-  GeometryPassExecutor() : NodeExecutor() {};
-
-  void execute(const GraphContext &context) override {
-    std::cout << "Executing GeometryPassExecutor" << std::endl;
-  }
-};
-
 int main() {
 
-  GraphBuilder graphBuilder;
-  try {
-
-    graphBuilder.addNode<GeometryPassExecutor>("GeometryPass")
-        .addOutput("gPosition")
-        .addOutput("gNormal")
-        .addOutput("gAlbedo");
-
-    graphBuilder.addNode<GeometryPassExecutor>("LightingPass")
-        .addInput("gPosition")
-        .addInput("gNormal")
-        .addInput("gAlbedo")
-        .addOutput("finalColor");
-
-    graphBuilder.addNode<GeometryPassExecutor>("PostProcessingPass")
-        .addInput("finalColor");
-
-    graphBuilder.compile();
-
-  } catch (const std::exception &e) {
-    std::cerr << "Error building graph: " << e.what() << std::endl;
-  }
-
   ApplicationProperties properties;
-  properties.title = "Volume Renderer";
+  
+  properties.title = "Tiny Renderer";
   properties.width = 800;
   properties.height = 600;
   properties.frameInterval = 0;
+  properties.majorVersion = 4;
+  properties.minorVersion = 1;
 
   Application app(properties);
 
@@ -89,7 +62,7 @@ int main() {
     std::vector<glm::vec3> normals;
     std::vector<glm::vec2> uvs;
     std::vector<unsigned int> indices;
-  } cubeData;
+  } modelData;
 
   tinyobj::attrib_t attrib;
   std::vector<tinyobj::shape_t> shapes;
@@ -107,56 +80,49 @@ int main() {
       for (size_t v = 0; v < fv; v++) {
         tinyobj::index_t idx = shape.mesh.indices[index_offset + v];
 
-        cubeData.positions.push_back(
+        modelData.positions.push_back(
             {attrib.vertices[3 * idx.vertex_index + 0],
              attrib.vertices[3 * idx.vertex_index + 1],
              attrib.vertices[3 * idx.vertex_index + 2]});
 
         if (idx.normal_index >= 0) {
-          cubeData.normals.push_back(
+          modelData.normals.push_back(
               {attrib.normals[3 * idx.normal_index + 0],
                attrib.normals[3 * idx.normal_index + 1],
                attrib.normals[3 * idx.normal_index + 2]});
         } else {
-          cubeData.normals.push_back({0.0f, 0.0f, 0.0f});
+          modelData.normals.push_back({0.0f, 0.0f, 0.0f});
         }
 
         if (idx.texcoord_index >= 0) {
-          cubeData.uvs.push_back(
+          modelData.uvs.push_back(
               {attrib.texcoords[2 * idx.texcoord_index + 0],
                attrib.texcoords[2 * idx.texcoord_index + 1]});
         } else {
-          cubeData.uvs.push_back({0.0f, 0.0f});
+          modelData.uvs.push_back({0.0f, 0.0f});
         }
 
-        cubeData.indices.push_back(
-            static_cast<unsigned int>(cubeData.indices.size()));
+        modelData.indices.push_back(
+            static_cast<unsigned int>(modelData.indices.size()));
       }
       index_offset += fv;
     }
   }
 
-  glm::vec3 minBounds(FLT_MAX);
-  glm::vec3 maxBounds(-FLT_MAX);
+  glm::vec3 minBounds(FLT_MAX), maxBounds(-FLT_MAX);
 
-  for (size_t i = 0; i < cubeData.positions.size(); ++i) 
-  {
-    const auto &pos = cubeData.positions[i];
-    minBounds = glm::min(minBounds, pos);
-    maxBounds = glm::max(maxBounds, pos);
-  }
+  std::for_each(modelData.positions.begin(), modelData.positions.end(),
+                [&](const glm::vec3 &pos) {
+                  minBounds = glm::min(minBounds, pos);
+                  maxBounds = glm::max(maxBounds, pos);
+                });
 
-  for(size_t i = 0; i < cubeData.positions.size(); ++i) 
-  {
-    cubeData.positions[i] = (cubeData.positions[i] - minBounds) / (maxBounds - minBounds) * 2.0f - 1.0f;
-  }
-
-  Mesh cubeMesh;
-  cubeMesh.setAttribute(VertexAttribute::Position, cubeData.positions);
-  cubeMesh.setAttribute(VertexAttribute::Normal, cubeData.normals);
-  cubeMesh.setAttribute(VertexAttribute::TexCoord, cubeData.uvs);
-  cubeMesh.setIndices(cubeData.indices);
-  cubeMesh.setRenderMode(RenderMode::Triangles);
+  std::transform(modelData.positions.begin(), modelData.positions.end(),
+                 modelData.positions.begin(),
+                 [minBounds, maxBounds](const glm::vec3 &pos) {
+                   return (pos - minBounds) / (maxBounds - minBounds) * 2.0f -
+                          1.0f;
+                 });
 
   struct {
     std::vector<glm::vec3> positions;
@@ -169,8 +135,85 @@ int main() {
                              {1.0f, 1.0f, 0.0f},
                              {-1.0f, 1.0f, 0.0f}};
   planeVertices.uvs = {{0.0f, 0.0f}, {1.0f, 0.0f}, {1.0f, 1.0f}, {0.0f, 1.0f}};
-
   planeVertices.indices = {0, 1, 2, 2, 3, 0};
+
+  struct LightDataBuffer {
+    glm::vec3 position[10];
+    glm::vec3 color[10];
+  };
+
+  std::vector<glm::vec3> lightPositions = {
+      {0.0f, 5.0f, 5.0f},  {5.0f, 5.0f, 0.0f},   {-5.0f, 5.0f, 0.0f},
+      {0.0f, 5.0f, -5.0f}, {3.5f, 5.0f, 3.5f},   {-3.5f, 5.0f, 3.5f},
+      {3.5f, 5.0f, -3.5f}, {-3.5f, 5.0f, -3.5f}, {7.0f, 5.0f, 7.0f},
+      {-7.0f, 5.0f, -7.0f}};
+
+  struct Vertex {
+    glm::vec3 position;
+    glm::vec3 normal;
+    glm::vec2 uv;
+  };
+
+  std::vector<Vertex> globalVertices;
+  std::vector<uint32_t> globalIndices;
+
+  uint32_t baseVertex_model = globalVertices.size();
+  uint32_t firstIndex_model = globalIndices.size();
+
+  for (size_t i = 0; i < modelData.positions.size(); i++) {
+    globalVertices.push_back(
+        {modelData.positions[i], modelData.normals[i], modelData.uvs[i]});
+  }
+
+  for (auto idx : modelData.indices) {
+    globalIndices.push_back(idx + baseVertex_model);
+  }
+
+  uint32_t modelIndexCount = modelData.indices.size();
+
+  uint32_t baseVertex_light = globalVertices.size();
+  uint32_t firstIndex_light = globalIndices.size();
+
+  for (size_t i = 0; i < lightPositions.size(); i++) {
+    globalVertices.push_back(
+        {lightPositions[i], glm::vec3(0, 0, 1), glm::vec2(0, 0)});
+  }
+
+  for (size_t i = 0; i < lightPositions.size(); i++) {
+    globalIndices.push_back(i + baseVertex_light);
+  }
+
+  uint32_t lightIndexCount = lightPositions.size();
+
+  GLuint vao, vbo, ebo;
+
+  glGenVertexArrays(1, &vao);
+  glGenBuffers(1, &vbo);
+  glGenBuffers(1, &ebo);
+
+  glBindVertexArray(vao);
+
+  glBindBuffer(GL_ARRAY_BUFFER, vbo);
+  glBufferData(GL_ARRAY_BUFFER, globalVertices.size() * sizeof(Vertex),
+               globalVertices.data(), GL_STATIC_DRAW);
+
+  glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+  glBufferData(GL_ELEMENT_ARRAY_BUFFER, globalIndices.size() * sizeof(uint32_t),
+               globalIndices.data(), GL_STATIC_DRAW);
+
+  glEnableVertexAttribArray(0);
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                        (void *)offsetof(Vertex, position));
+
+  glEnableVertexAttribArray(1);
+  glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                        (void *)offsetof(Vertex, normal));
+
+  glEnableVertexAttribArray(2);
+  glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex),
+                        (void *)offsetof(Vertex, uv));
+
+  glBindVertexArray(0);
 
   Mesh planeMesh;
   planeMesh.setAttribute(VertexAttribute::Position, planeVertices.positions);
@@ -178,133 +221,162 @@ int main() {
   planeMesh.setIndices(planeVertices.indices);
   planeMesh.setRenderMode(RenderMode::Triangles);
 
+  struct DrawElementsIndirectCommand {
+    GLuint count;
+    GLuint instanceCount;
+    GLuint firstIndex;
+    GLuint baseVertex;
+    GLuint baseInstance;
+  };
+
+  std::vector<DrawElementsIndirectCommand> commands;
+
+  commands.push_back(
+      {static_cast<GLuint>(modelIndexCount), 1, firstIndex_model, 0, 0});
+
+  commands.push_back(
+      {static_cast<GLuint>(lightIndexCount), 1, firstIndex_light, 0, 0});
+
+  GLuint indirectBuffer;
+  glGenBuffers(1, &indirectBuffer);
+  glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectBuffer);
+
+  glBufferData(GL_DRAW_INDIRECT_BUFFER,
+               commands.size() * sizeof(DrawElementsIndirectCommand),
+               commands.data(), GL_STATIC_DRAW);
+
+  struct ObjectData {
+    glm::mat4 model;
+  };
+
+  std::vector<ObjectData> objectData;
+
+  objectData.push_back({glm::mat4(1.0f)}); // model
+  objectData.push_back({glm::mat4(1.0f)}); // light
+
+  GLuint instanceVBO;
+
+  glGenBuffers(1, &instanceVBO);
+  glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+
+  glBufferData(GL_ARRAY_BUFFER, objectData.size() * sizeof(ObjectData),
+               objectData.data(), GL_DYNAMIC_DRAW);
+
+  glBindVertexArray(vao);
+  glBindBuffer(GL_ARRAY_BUFFER, instanceVBO);
+
+  for (int i = 0; i < 4; ++i) {
+    glEnableVertexAttribArray(3 + i);
+    glVertexAttribPointer(3 + i, 4, GL_FLOAT, GL_FALSE, sizeof(ObjectData),
+                          (void *)(sizeof(float) * 4 * i));
+    glVertexAttribDivisor(3 + i, 1);
+  }
+
   int currentWidth = app.getWidth();
   int currentHeight = app.getHeight();
 
-  GLuint gPosition;
-  GLuint gNormal;
-  GLuint gAlbedo;
+  GraphContext graphContext;
+
+  Texture2DDescriptor depthDesc;
+  depthDesc.width = currentWidth;
+  depthDesc.height = currentHeight;
+  depthDesc.internalFormat = GL_DEPTH_COMPONENT32F;
+  depthDesc.format = GL_DEPTH_COMPONENT;
+  depthDesc.type = GL_FLOAT;
+
+  Texture2DDescriptor rgba16FDesc;
+  rgba16FDesc.width = currentWidth;
+  rgba16FDesc.height = currentHeight;
+  rgba16FDesc.internalFormat = GL_RGBA16F;
+  rgba16FDesc.format = GL_RGBA;
+  rgba16FDesc.type = GL_FLOAT;
+
+  Texture2DDescriptor rgbaDesc;
+  rgbaDesc.width = currentWidth;
+  rgbaDesc.height = currentHeight;
+  rgbaDesc.internalFormat = GL_RGBA;
+  rgbaDesc.format = GL_RGBA;
+  rgbaDesc.type = GL_UNSIGNED_BYTE;
+
+  Texture2DDescriptor rg16FDesc;
+  rg16FDesc.width = currentWidth;
+  rg16FDesc.height = currentHeight;
+  rg16FDesc.internalFormat = GL_RG16F;
+  rg16FDesc.format = GL_RG;
+  rg16FDesc.type = GL_FLOAT;
+
+  Texture2D gDepthTexture = graphContext.textureRegister.create(depthDesc);
+  Texture2D gPositionTexture = graphContext.textureRegister.create(rgba16FDesc);
+  Texture2D gNormalTexture = graphContext.textureRegister.create(rgba16FDesc);
+  Texture2D gAlbedoTexture = graphContext.textureRegister.create(rgba16FDesc);
+  Texture2D gTextureCoordTexture =
+      graphContext.textureRegister.create(rg16FDesc);
+
+  // depth, position, normal, albedo, texture coord
   GLuint gBuffer;
-  GLuint gDepth;
-
-  // Depth texture
-  glGenTextures(1, &gDepth);
-  glBindTexture(GL_TEXTURE_2D, gDepth);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, currentWidth,
-               currentHeight, 0, GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glBindTexture(GL_TEXTURE_2D, 0);
-
-  // GPASS position buffer
-  glGenTextures(1, &gPosition);
-  glBindTexture(GL_TEXTURE_2D, gPosition);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, currentWidth, currentHeight, 0,
-               GL_RGBA, GL_FLOAT, nullptr);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glBindTexture(GL_TEXTURE_2D, 0);
-
-  // GPASS normal buffer
-  glGenTextures(1, &gNormal);
-  glBindTexture(GL_TEXTURE_2D, gNormal);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, currentWidth, currentHeight, 0,
-               GL_RGBA, GL_FLOAT, nullptr);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glBindTexture(GL_TEXTURE_2D, 0);
-
-  // GPASS albedo buffer
-  glGenTextures(1, &gAlbedo);
-  glBindTexture(GL_TEXTURE_2D, gAlbedo);
-  glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, currentWidth, currentHeight, 0,
-               GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-  glBindTexture(GL_TEXTURE_2D, 0);
 
   // Framebuffer
   glGenFramebuffers(1, &gBuffer);
   glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                         gPosition, 0);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D,
-                         gNormal, 0);
-  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D,
-                         gAlbedo, 0);
+
   glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
-                         gDepth, 0);
+                         gDepthTexture.getNativeHandle(), 0);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                         gPositionTexture.getNativeHandle(), 0);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D,
+                         gNormalTexture.getNativeHandle(), 0);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D,
+                         gAlbedoTexture.getNativeHandle(), 0);
+  glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D,
+                         gTextureCoordTexture.getNativeHandle(), 0);
 
   if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
     std::cerr << "Framebuffer not complete!" << std::endl;
     return -1;
   }
 
-  const GLenum attachments[3] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1,
-                                 GL_COLOR_ATTACHMENT2};
-  glDrawBuffers(3, attachments);
+  const GLenum attachments[4] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1,
+                                 GL_COLOR_ATTACHMENT2, GL_COLOR_ATTACHMENT3};
+  glDrawBuffers(4, attachments);
 
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   auto updateFramebufferSizes = [&](int w, int h) {
-    if (gDepth)
-      glDeleteTextures(1, &gDepth);
-    if (gPosition)
-      glDeleteTextures(1, &gPosition);
-    if (gNormal)
-      glDeleteTextures(1, &gNormal);
-    if (gAlbedo)
-      glDeleteTextures(1, &gAlbedo);
-    if (gBuffer)
-      glDeleteFramebuffers(1, &gBuffer);
 
-    glGenTextures(1, &gDepth);
-    glBindTexture(GL_TEXTURE_2D, gDepth);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_DEPTH_COMPONENT32F, w, h, 0,
-                 GL_DEPTH_COMPONENT, GL_FLOAT, nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_COMPARE_MODE, GL_NONE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    graphContext.textureRegister.dispose(gDepthTexture);
+    graphContext.textureRegister.dispose(gPositionTexture);
+    graphContext.textureRegister.dispose(gNormalTexture);
+    graphContext.textureRegister.dispose(gAlbedoTexture);
+    graphContext.textureRegister.dispose(gTextureCoordTexture);
 
-    glGenTextures(1, &gPosition);
-    glBindTexture(GL_TEXTURE_2D, gPosition);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT,
-                 nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    depthDesc.width = w;
+    depthDesc.height = h;
+    
+    rgba16FDesc.width = w;
+    rgba16FDesc.height = h;
+    
+    rg16FDesc.width = w;
+    rg16FDesc.height = h;
+    
+    gDepthTexture = graphContext.textureRegister.create(depthDesc);
+    gPositionTexture = graphContext.textureRegister.create(rgba16FDesc);
+    gNormalTexture = graphContext.textureRegister.create(rgba16FDesc);
+    gAlbedoTexture = graphContext.textureRegister.create(rgba16FDesc);
+    gTextureCoordTexture = graphContext.textureRegister.create(rg16FDesc);
 
-    glGenTextures(1, &gNormal);
-    glBindTexture(GL_TEXTURE_2D, gNormal);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA16F, w, h, 0, GL_RGBA, GL_FLOAT,
-                 nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-
-    glGenTextures(1, &gAlbedo);
-    glBindTexture(GL_TEXTURE_2D, gAlbedo);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, w, h, 0, GL_RGBA, GL_UNSIGNED_BYTE,
-                 nullptr);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    glGenFramebuffers(1, &gBuffer);
     glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
-                           gPosition, 0);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D,
-                           gNormal, 0);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D,
-                           gAlbedo, 0);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_TEXTURE_2D,
-                           gDepth, 0);
+                           gDepthTexture.getNativeHandle(), 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D,
+                           gPositionTexture.getNativeHandle(), 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT1, GL_TEXTURE_2D,
+                           gNormalTexture.getNativeHandle(), 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT2, GL_TEXTURE_2D,
+                           gAlbedoTexture.getNativeHandle(), 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT3, GL_TEXTURE_2D,
+                           gTextureCoordTexture.getNativeHandle(), 0);
 
-    glDrawBuffers(3, attachments);
+    glDrawBuffers(4, attachments);
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE) {
       std::cerr << "Framebuffer not complete!" << std::endl;
@@ -312,8 +384,6 @@ int main() {
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glViewport(0, 0, w, h);
   };
-
-  glm::mat4 model = glm::mat4(1.0f);
 
   glm::vec3 cameraPos(0.0f, 0.0f, 3.0f);
   glm::vec3 cameraTarget(0.0f, 0.0f, -1.0f);
@@ -347,21 +417,6 @@ int main() {
     float time;
     glm::vec3 _pad2;
   };
-
-  struct LightDataBuffer {
-    glm::vec3 position[10];
-    glm::vec3 color[10];
-  };
-
-  std::vector<glm::vec3> lightPositions = {
-      {0.0f, 5.0f, 5.0f},  {5.0f, 5.0f, 0.0f},   {-5.0f, 5.0f, 0.0f},
-      {0.0f, 5.0f, -5.0f}, {3.5f, 5.0f, 3.5f},   {-3.5f, 5.0f, 3.5f},
-      {3.5f, 5.0f, -3.5f}, {-3.5f, 5.0f, -3.5f}, {7.0f, 5.0f, 7.0f},
-      {-7.0f, 5.0f, -7.0f}};
-
-  Mesh lightMesh;
-  lightMesh.setAttribute(VertexAttribute::Position, lightPositions);
-  lightMesh.setRenderMode(RenderMode::Points);
 
   FramebufferDataBuffer framebufferDataBuffer;
   LightDataBuffer lightDataBuffer;
@@ -469,7 +524,7 @@ int main() {
 
     if (glfwGetKey(app.getNativeHandle(), GLFW_KEY_D) == GLFW_PRESS) {
       cameraPos += glm::vec3(1.0f, 0.0f, 0.0f) * deltaTime * 5.0f;
-    } 
+    }
 
     if (app.getWidth() != currentWidth || app.getHeight() != currentHeight) {
       currentWidth = app.getWidth();
@@ -477,14 +532,12 @@ int main() {
       updateFramebufferSizes(currentWidth, currentHeight);
     }
 
-    model = glm::rotate(model, deltaTime * glm::radians(20.0f),
-                        glm::normalize(glm::vec3(1.0f, 1.0f, 0.0f)));
-
     // First pass: render to texture
     glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
     glViewport(0, 0, currentWidth, currentHeight);
     glEnable(GL_DEPTH_TEST);
 
+    // Clear the framebuffer
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -494,11 +547,12 @@ int main() {
     gPassShader.setFloat("mRoughness", material.roughness);
     gPassShader.setVec3("mAlbedo", material.albedo);
     gPassShader.setFloat("mClearcoat", material.clearcoat);
-    gPassShader.setMat4("modelMatrix", model);
-    cubeMesh.render();
 
-    gPassShader.setMat4("modelMatrix", glm::mat4(1.0f));
-    lightMesh.render();
+    glBindVertexArray(vao);
+    glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectBuffer);
+
+    glMultiDrawElementsIndirect(GL_TRIANGLES, GL_UNSIGNED_INT, 0,
+                                commands.size(), 0);
 
     glDisable(GL_DEPTH_TEST);
 
@@ -511,17 +565,17 @@ int main() {
 
     screenPassShader.use();
 
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, gPosition);
+    gPositionTexture.bind(TextureSlot::SLOT_0);
     screenPassShader.setInt("gPosition", 0);
 
-    glActiveTexture(GL_TEXTURE1);
-    glBindTexture(GL_TEXTURE_2D, gNormal);
+    gNormalTexture.bind(TextureSlot::SLOT_1);
     screenPassShader.setInt("gNormal", 1);
 
-    glActiveTexture(GL_TEXTURE2);
-    glBindTexture(GL_TEXTURE_2D, gAlbedo);
-    screenPassShader.setInt("gAlbedo", 2);
+    gAlbedoTexture.bind(TextureSlot::SLOT_2);
+    screenPassShader.setInt("gDiffuse", 2);
+
+    gTextureCoordTexture.bind(TextureSlot::SLOT_3);
+    screenPassShader.setInt("gTextureCoord", 3);
 
     screenPassShader.setVec3("cameraPos", cameraPos);
     planeMesh.render();
@@ -539,16 +593,20 @@ int main() {
     ImGui::Begin("Debug View");
 
     ImGui::Text("Position (HDR)");
-    ImGui::Image((void *)(intptr_t)gPosition, ImVec2(256, 256), ImVec2(0, 1),
-                 ImVec2(1, 0));
+    ImGui::Image((void *)(intptr_t)gPositionTexture.getNativeHandle(),
+                 ImVec2(128, 128), ImVec2(0, 1), ImVec2(1, 0));
 
     ImGui::Text("Normal (needs remap)");
-    ImGui::Image((void *)(intptr_t)gNormal, ImVec2(256, 256), ImVec2(0, 1),
-                 ImVec2(1, 0));
+    ImGui::Image((void *)(intptr_t)gNormalTexture.getNativeHandle(),
+                 ImVec2(128, 128), ImVec2(0, 1), ImVec2(1, 0));
 
     ImGui::Text("Albedo");
-    ImGui::Image((void *)(intptr_t)gAlbedo, ImVec2(256, 256), ImVec2(0, 1),
-                 ImVec2(1, 0));
+    ImGui::Image((void *)(intptr_t)gAlbedoTexture.getNativeHandle(),
+                 ImVec2(128, 128), ImVec2(0, 1), ImVec2(1, 0));
+
+    ImGui::Text("Texture Coord");
+    ImGui::Image((void *)(intptr_t)gTextureCoordTexture.getNativeHandle(),
+                 ImVec2(128, 128), ImVec2(0, 1), ImVec2(1, 0));
 
     ImGui::End();
 

@@ -11,6 +11,8 @@ struct ApplicationProperties {
     int width;
     int height;
     int frameInterval;
+    int majorVersion;
+    int minorVersion;
     std::string title;
 };
 

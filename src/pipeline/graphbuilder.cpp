@@ -80,10 +80,13 @@ Graph GraphBuilder::compile() const {
   std::unordered_map<std::string, int> bindingToIndexMap;
   createBindingIndexMap(bindingToIndexMap);
 
-  for(const auto &desc : _descriptors) {
-    for(const auto &input : desc.getInputs()) {
-      if(bindingToIndexMap.find(input) == bindingToIndexMap.end()) {
-        throw std::runtime_error("Input '" + input + "' of node '" + desc.getName() + "' is not produced by any node");
+  for (const auto &desc : _descriptors) {
+    for (const auto &input : desc.getInputs()) {
+
+      if (bindingToIndexMap.find(input) == bindingToIndexMap.end()) {
+        throw std::runtime_error("Input '" + input + "' of node '" +
+                                 desc.getName() +
+                                 "' is not produced by any node");
       }
     }
   }

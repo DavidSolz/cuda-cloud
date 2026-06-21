@@ -12,7 +12,8 @@ in vec2 uv;
 
 uniform sampler2D gPosition;
 uniform sampler2D gNormal;
-uniform sampler2D gAlbedo;
+uniform sampler2D gDiffuse;
+uniform sampler2D gTextureCoord;
 uniform float mClearCoatRoughness = 0.05f;
 
 layout(location = 0) out vec4 fragColor;
@@ -81,9 +82,12 @@ void main()
     vec3 normal = normalize(normalData.xyz); 
     float roughness = normalData.w;
 
-    vec4 albedoData = texture(gAlbedo, uv);
-    vec3 albedo = albedoData.rgb;
-    float metallic = albedoData.w;
+    vec4 diffuseData = texture(gDiffuse, uv);
+    vec3 albedo = diffuseData.rgb;
+    float metallic = diffuseData.w;
+
+    vec4 textureCoordData = texture(gTextureCoord, uv);
+    vec2 texCoord = textureCoordData.xy;
 
     vec3 view = normalize(cameraPos - position);
 

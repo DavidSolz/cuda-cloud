@@ -116,6 +116,8 @@ public:
   size_t getVertexCount() const;
   size_t getIndexCount() const;
 
+  size_t getVertexArrayObject() const;
+
   void render() const;
 
   ~Mesh();
