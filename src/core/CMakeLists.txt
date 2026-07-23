@@ -1,6 +1,7 @@
 
 add_library(core STATIC
     application.cpp
+    input.cpp
 )
 
 find_package(OpenMP)

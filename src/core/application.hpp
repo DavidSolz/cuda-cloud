@@ -1,6 +1,5 @@
 #pragma once
 
-
 #include <glad/glad.h>
 #include <GLFW/glfw3.h>
 
@@ -16,27 +15,34 @@ struct ApplicationProperties {
     std::string title;
 };
 
+using NativeWindowHandle = GLFWwindow*;
+
 class Application {
 private:
 
     static bool _initialized;
 
-    GLFWwindow* _window;
+    NativeWindowHandle _window;
 
     size_t _width;
     size_t _height;
 
-    static void onResize(GLFWwindow* window, int width, int height);
+    static void onResize(NativeWindowHandle window, int width, int height);
 
 public:
-    Application(const ApplicationProperties& properties);
+    Application();
     
+    NativeWindowHandle open(const ApplicationProperties& properties);
+
+    void close() const;
+
+    NativeWindowHandle getNativeHandle() const;
+
     size_t getWidth() const;
+    
     size_t getHeight() const;
 
-    GLFWwindow * getNativeHandle() const;
-
-    bool shouldClose() const;
+    bool isClosed() const;
 
     void checkError() const;
 

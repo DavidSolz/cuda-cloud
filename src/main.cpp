@@ -6,6 +6,7 @@
 
 #include <application.hpp>
 #include <imguilayer.hpp>
+#include <input.hpp>
 #include <mesh.hpp>
 #include <shader.hpp>
 
@@ -39,7 +40,7 @@ void renderFooter(int fps, float frameTime) {
 int main() {
 
   ApplicationProperties properties;
-  
+
   properties.title = "Tiny Renderer";
   properties.width = 800;
   properties.height = 600;
@@ -47,9 +48,22 @@ int main() {
   properties.majorVersion = 4;
   properties.minorVersion = 1;
 
-  Application app(properties);
+  Application app;
 
-  ImGuiLayer imgui(app.getNativeHandle());
+  NativeWindowHandle nativeWindow = app.open(properties);
+
+  ImGuiLayer imgui(nativeWindow);
+
+  Input input(nativeWindow);
+
+  input.bindAction("Space", Input::DeviceType::Keyboard, GLFW_KEY_SPACE);
+  input.bindAction("LeftShift", Input::DeviceType::Keyboard,
+                   GLFW_KEY_LEFT_SHIFT);
+  input.bindAction("W", Input::DeviceType::Keyboard, GLFW_KEY_W);
+  input.bindAction("S", Input::DeviceType::Keyboard, GLFW_KEY_S);
+  input.bindAction("A", Input::DeviceType::Keyboard, GLFW_KEY_A);
+  input.bindAction("D", Input::DeviceType::Keyboard, GLFW_KEY_D);
+  input.bindAction("Escape", Input::DeviceType::Keyboard, GLFW_KEY_ESCAPE);
 
   auto renderer = glGetString(GL_RENDERER);
   auto version = glGetString(GL_VERSION);
@@ -342,7 +356,6 @@ int main() {
   glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
   auto updateFramebufferSizes = [&](int w, int h) {
-
     graphContext.textureRegister.dispose(gDepthTexture);
     graphContext.textureRegister.dispose(gPositionTexture);
     graphContext.textureRegister.dispose(gNormalTexture);
@@ -351,13 +364,13 @@ int main() {
 
     depthDesc.width = w;
     depthDesc.height = h;
-    
+
     rgba16FDesc.width = w;
     rgba16FDesc.height = h;
-    
+
     rg16FDesc.width = w;
     rg16FDesc.height = h;
-    
+
     gDepthTexture = graphContext.textureRegister.create(depthDesc);
     gPositionTexture = graphContext.textureRegister.create(rgba16FDesc);
     gNormalTexture = graphContext.textureRegister.create(rgba16FDesc);
@@ -459,13 +472,16 @@ int main() {
         glm::vec3((cos(angle) + 1.0f) * 0.5f, (sin(angle) + 1.0f) * 0.5f, 0.5f);
   }
 
-  while (!app.shouldClose()) {
+  bool vSyncEnabled = true;
+
+  while (!app.isClosed()) {
     // Timing
     auto currentTime = std::chrono::high_resolution_clock::now();
     float deltaTime =
         std::chrono::duration<float>(currentTime - lastTime).count();
 
     lastTime = currentTime;
+    input.update();
 
     framebufferDataBuffer.projectionMatrix = glm::perspective(
         glm::radians(45.0f), (float)currentWidth / (float)currentHeight, 0.1f,
@@ -498,33 +514,37 @@ int main() {
     lastDeltaTime = deltaTime;
     frameCount++;
 
-    if (glfwGetKey(app.getNativeHandle(), GLFW_KEY_ESCAPE) == GLFW_PRESS) {
-      glfwSetWindowShouldClose(app.getNativeHandle(), true);
+    if (input.getButton("Escape")) {
+      app.close();
     }
 
-    if (glfwGetKey(app.getNativeHandle(), GLFW_KEY_SPACE) == GLFW_PRESS) {
-      cameraPos += glm::vec3(0.0f, 1.0f, 0.0f) * deltaTime * 5.0f;
+    glm::vec3 direction = glm::vec3(0.0f, 0.0f, 0.0f);
+
+    if (input.getButton("Space")) {
+      direction += glm::vec3(0.0f, 1.0f, 0.0f);
     }
 
-    if (glfwGetKey(app.getNativeHandle(), GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
-      cameraPos += glm::vec3(0.0f, -1.0f, 0.0f) * deltaTime * 5.0f;
+    if (input.getButton("LeftShift")) {
+      direction += glm::vec3(0.0f, -1.0f, 0.0f);
     }
 
-    if (glfwGetKey(app.getNativeHandle(), GLFW_KEY_W) == GLFW_PRESS) {
-      cameraPos += glm::vec3(0.0f, 0.0f, -1.0f) * deltaTime * 5.0f;
+    if (input.getButton("W")) {
+      direction += glm::vec3(0.0f, 0.0f, -1.0f);
     }
 
-    if (glfwGetKey(app.getNativeHandle(), GLFW_KEY_S) == GLFW_PRESS) {
-      cameraPos += glm::vec3(0.0f, 0.0f, 1.0f) * deltaTime * 5.0f;
+    if (input.getButton("S")) {
+      direction += glm::vec3(0.0f, 0.0f, 1.0f);
     }
 
-    if (glfwGetKey(app.getNativeHandle(), GLFW_KEY_A) == GLFW_PRESS) {
-      cameraPos += glm::vec3(-1.0f, 0.0f, 0.0f) * deltaTime * 5.0f;
+    if (input.getButton("A")) {
+      direction += glm::vec3(-1.0f, 0.0f, 0.0f);
     }
 
-    if (glfwGetKey(app.getNativeHandle(), GLFW_KEY_D) == GLFW_PRESS) {
-      cameraPos += glm::vec3(1.0f, 0.0f, 0.0f) * deltaTime * 5.0f;
+    if (input.getButton("D")) {
+      direction += glm::vec3(1.0f, 0.0f, 0.0f);
     }
+
+    cameraPos += direction * deltaTime * 5.0f;
 
     if (app.getWidth() != currentWidth || app.getHeight() != currentHeight) {
       currentWidth = app.getWidth();
@@ -543,10 +563,10 @@ int main() {
 
     gPassShader.use();
 
-    gPassShader.setFloat("mMetallic", material.metallic);
-    gPassShader.setFloat("mRoughness", material.roughness);
-    gPassShader.setVec3("mAlbedo", material.albedo);
-    gPassShader.setFloat("mClearcoat", material.clearcoat);
+    gPassShader.setUniform("mMetallic", material.metallic);
+    gPassShader.setUniform("mRoughness", material.roughness);
+    gPassShader.setUniform("mAlbedo", material.albedo);
+    gPassShader.setUniform("mClearcoat", material.clearcoat);
 
     glBindVertexArray(vao);
     glBindBuffer(GL_DRAW_INDIRECT_BUFFER, indirectBuffer);
@@ -566,18 +586,18 @@ int main() {
     screenPassShader.use();
 
     gPositionTexture.bind(TextureSlot::SLOT_0);
-    screenPassShader.setInt("gPosition", 0);
+    screenPassShader.setUniform("gPosition", 0);
 
     gNormalTexture.bind(TextureSlot::SLOT_1);
-    screenPassShader.setInt("gNormal", 1);
+    screenPassShader.setUniform("gNormal", 1);
 
     gAlbedoTexture.bind(TextureSlot::SLOT_2);
-    screenPassShader.setInt("gDiffuse", 2);
+    screenPassShader.setUniform("gDiffuse", 2);
 
     gTextureCoordTexture.bind(TextureSlot::SLOT_3);
-    screenPassShader.setInt("gTextureCoord", 3);
+    screenPassShader.setUniform("gTextureCoord", 3);
 
-    screenPassShader.setVec3("cameraPos", cameraPos);
+    screenPassShader.setUniform("cameraPos", cameraPos);
     planeMesh.render();
 
     imgui.begin();
@@ -588,6 +608,9 @@ int main() {
     ImGui::DragFloat("Metallic", &material.metallic, 0.01f, 0.0f, 1.0f);
     ImGui::DragFloat("Roughness", &material.roughness, 0.01f, 0.0f, 1.0f);
     ImGui::DragFloat("Clearcoat", &material.clearcoat, 0.01f, 0.0f, 1.0f);
+    if(ImGui::Checkbox("VSync", &vSyncEnabled)) {
+      glfwSwapInterval(vSyncEnabled ? 1 : 0);
+    }
     ImGui::End();
 
     ImGui::Begin("Debug View");
